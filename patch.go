@@ -139,6 +139,7 @@ func (this *Patches) ApplyFuncVarSeq(target interface{}, outputs []OutputCell) *
 }
 
 func (this *Patches) Reset() {
+	mutex.Lock()
 	this.originals.Range(func(key, value interface{}) bool {
 		var realKey uintptr
 		if val, ok := key.(uintptr); ok {
@@ -151,7 +152,6 @@ func (this *Patches) Reset() {
 			s := reflect.ValueOf(value)
 			realVal = s.Bytes()
 		}
-
 		modifyBinary(realKey, realVal)
 		this.originals.Delete(key)
 		return true
@@ -169,6 +169,7 @@ func (this *Patches) Reset() {
 	//for target, variable := range this.values {
 	//	target.Elem().Set(variable)
 	//}
+	mutex.Unlock()
 }
 
 func (this *Patches) ApplyCore(target, double reflect.Value) *Patches {
@@ -216,12 +217,16 @@ func (this *Patches) check(target, double reflect.Value) {
 	}
 }
 
+var mutex sync.Mutex
+
 func replace(target, double uintptr) []byte {
+	mutex.Lock()
 	code := buildJmpDirective(double)
 	bytes := entryAddress(target, len(code))
 	original := make([]byte, len(bytes))
 	copy(original, bytes)
 	modifyBinary(target, code)
+	mutex.Unlock()
 	return original
 }
 

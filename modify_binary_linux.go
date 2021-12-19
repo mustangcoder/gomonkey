@@ -8,7 +8,7 @@ func modifyBinary(target uintptr, bytes []byte) {
 	if err != nil {
 		panic(err)
 	}
-	copy(function, bytes)
+	copySync(function, bytes)
 	err = mprotectCrossPage(target, len(bytes), syscall.PROT_READ|syscall.PROT_EXEC)
 	if err != nil {
 		panic(err)
