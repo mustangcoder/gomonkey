@@ -1,4 +1,4 @@
-module github.com/mustangcode/gomonkey
+module github.com/mustangcoder/gomonkey
 
 go 1.16
 
