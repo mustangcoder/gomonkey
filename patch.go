@@ -2,7 +2,7 @@ package gomonkey
 
 import (
 	"fmt"
-	"github.com/agiledragon/gomonkey/v2/creflect"
+	"github.com/mustangcode/gomonkey/creflect"
 	"reflect"
 	"sync"
 	"syscall"
