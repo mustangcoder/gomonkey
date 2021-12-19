@@ -4,14 +4,16 @@ import (
 	"fmt"
 	"github.com/agiledragon/gomonkey/v2/creflect"
 	"reflect"
+	"sync"
 	"syscall"
 	"unsafe"
 )
 
 type Patches struct {
-	originals    map[uintptr][]byte
-	values       map[reflect.Value]reflect.Value
-	valueHolders map[reflect.Value]reflect.Value
+	scene        sync.Map
+	originals    sync.Map
+	values       sync.Map
+	valueHolders sync.Map
 }
 
 type Params []interface{}
@@ -53,7 +55,7 @@ func ApplyFuncVarSeq(target interface{}, outputs []OutputCell) *Patches {
 }
 
 func create() *Patches {
-	return &Patches{originals: make(map[uintptr][]byte), values: make(map[reflect.Value]reflect.Value), valueHolders: make(map[reflect.Value]reflect.Value)}
+	return &Patches{}
 }
 
 func NewPatches() *Patches {
@@ -90,7 +92,7 @@ func (this *Patches) ApplyGlobalVar(target, double interface{}) *Patches {
 		panic("target is not a pointer")
 	}
 
-	this.values[t] = reflect.ValueOf(t.Elem().Interface())
+	this.values.Store(t, reflect.ValueOf(t.Elem().Interface()))
 	d := reflect.ValueOf(double)
 	t.Elem().Set(d)
 	return this
@@ -137,26 +139,50 @@ func (this *Patches) ApplyFuncVarSeq(target interface{}, outputs []OutputCell) *
 }
 
 func (this *Patches) Reset() {
-	for target, bytes := range this.originals {
-		modifyBinary(target, bytes)
-		delete(this.originals, target)
-	}
+	this.originals.Range(func(key, value interface{}) bool {
+		var realKey uintptr
+		if val, ok := key.(uintptr); ok {
+			realKey = val
+		}
 
-	for target, variable := range this.values {
-		target.Elem().Set(variable)
-	}
+		var realVal []byte
+		switch reflect.TypeOf(value).Kind() {
+		case reflect.Slice, reflect.Array:
+			s := reflect.ValueOf(value)
+			realVal = s.Bytes()
+		}
+
+		modifyBinary(realKey, realVal)
+		this.originals.Delete(key)
+		return true
+	})
+	//for target, bytes := range this.originals {
+	//	modifyBinary(target, bytes)
+	//	delete(this.originals, target)
+	//}
+
+	this.values.Range(func(key, value interface{}) bool {
+		reflect.ValueOf(key).Elem().Set(reflect.ValueOf(value))
+		return true
+	})
+
+	//for target, variable := range this.values {
+	//	target.Elem().Set(variable)
+	//}
 }
 
 func (this *Patches) ApplyCore(target, double reflect.Value) *Patches {
 	this.check(target, double)
 	assTarget := *(*uintptr)(getPointer(target))
-	if _, ok := this.originals[assTarget]; ok {
+	if _, ok := this.originals.Load(assTarget); ok {
 		panic("patch has been existed")
 	}
 
-	this.valueHolders[double] = double
+	//this.valueHolders[double] = double
+	this.valueHolders.Store(double, double)
 	original := replace(assTarget, uintptr(getPointer(double)))
-	this.originals[assTarget] = original
+	//this.originals[assTarget] = original
+	this.originals.Store(assTarget, original)
 	return this
 }
 
@@ -165,12 +191,14 @@ func (this *Patches) ApplyCoreOnlyForPrivateMethod(target unsafe.Pointer, double
 		panic("double is not a func")
 	}
 	assTarget := *(*uintptr)(target)
-	if _, ok := this.originals[assTarget]; ok {
+	if _, ok := this.originals.Load(assTarget); ok {
 		panic("patch has been existed")
 	}
-	this.valueHolders[double] = double
+	//this.valueHolders[double] = double
+	this.valueHolders.Store(double, double)
 	original := replace(assTarget, uintptr(getPointer(double)))
-	this.originals[assTarget] = original
+	//this.originals[assTarget] = original
+	this.originals.Store(assTarget, original)
 	return this
 }
 
